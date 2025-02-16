@@ -1,13 +1,6 @@
 package com.yupi.usercenter.common;
 
-// 讲师 【coder_鱼_皮】 https://space.bilibili.com/12890453/
 
-/**
- * 错误码
- *
- * @author <a href="https://github.com/liyupi">程序员鱼皮</a>
- * @from <a href="https://yupi.icu">编程导航知识星球</a>
- */
 public enum ErrorCode {
 
     SUCCESS(0, "ok", ""),
@@ -15,7 +8,9 @@ public enum ErrorCode {
     NULL_ERROR(40001, "请求数据为空", ""),
     NOT_LOGIN(40100, "未登录", ""),
     NO_AUTH(40101, "无权限", ""),
-    SYSTEM_ERROR(50000, "系统内部异常", "");
+    SYSTEM_ERROR(50000, "系统内部异常", ""),
+    EXIST_ERROR(50001,"用户已存在" , "");
+
 
     private final int code;
 
@@ -43,7 +38,7 @@ public enum ErrorCode {
         return message;
     }
 
-    // https://t.zsxq.com/0emozsIJh
+
 
     public String getDescription() {
         return description;

@@ -1,6 +1,5 @@
 package com.yupi.usercenter.service;
 
-// [编程学习交流圈](https://www.code-nav.cn/) 连接万名编程爱好者，一起优秀！20000+ 小伙伴交流分享、40+ 大厂嘉宾一对一答疑、100+ 各方向编程交流群、4000+ 编程问答参考
 
 import com.yupi.usercenter.model.domain.User;
 import org.junit.jupiter.api.Assertions;
@@ -9,12 +8,6 @@ import org.springframework.boot.test.context.SpringBootTest;
 
 import javax.annotation.Resource;
 
-/**
- * 用户服务测试
- *
- * @author <a href="https://github.com/liyupi">程序员鱼皮</a>
- * @from <a href="https://yupi.icu">编程导航知识星球</a>
- */
 @SpringBootTest
 public class UserServiceTest {
 
@@ -87,29 +80,29 @@ public class UserServiceTest {
         String userAccount = "yupi";
         String userPassword = "";
         String checkPassword = "123456";
-        String planetCode = "1";
-        long result = userService.userRegister(userAccount, userPassword, checkPassword, planetCode);
+
+        long result = userService.userRegister(userAccount, userPassword, checkPassword);
         Assertions.assertEquals(-1, result);
         userAccount = "yu";
-        result = userService.userRegister(userAccount, userPassword, checkPassword, planetCode);
+        result = userService.userRegister(userAccount, userPassword, checkPassword);
         Assertions.assertEquals(-1, result);
         userAccount = "yupi";
         userPassword = "123456";
-        result = userService.userRegister(userAccount, userPassword, checkPassword, planetCode);
+        result = userService.userRegister(userAccount, userPassword, checkPassword);
         Assertions.assertEquals(-1, result);
         userAccount = "yu pi";
         userPassword = "12345678";
-        result = userService.userRegister(userAccount, userPassword, checkPassword, planetCode);
+        result = userService.userRegister(userAccount, userPassword, checkPassword);
         Assertions.assertEquals(-1, result);
         checkPassword = "123456789";
-        result = userService.userRegister(userAccount, userPassword, checkPassword, planetCode);
+        result = userService.userRegister(userAccount, userPassword, checkPassword);
         Assertions.assertEquals(-1, result);
         userAccount = "dogYupi";
         checkPassword = "12345678";
-        result = userService.userRegister(userAccount, userPassword, checkPassword, planetCode);
+        result = userService.userRegister(userAccount, userPassword, checkPassword);
         Assertions.assertEquals(-1, result);
         userAccount = "yupi";
-        result = userService.userRegister(userAccount, userPassword, checkPassword, planetCode);
+        result = userService.userRegister(userAccount, userPassword, checkPassword);
         Assertions.assertEquals(-1, result);
     }
 }

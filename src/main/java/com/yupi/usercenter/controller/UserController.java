@@ -1,7 +1,8 @@
 package com.yupi.usercenter.controller;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
-import com.fasterxml.jackson.databind.ser.Serializers;
+import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.yupi.usercenter.common.BaseResponse;
 import com.yupi.usercenter.common.ErrorCode;
 import com.yupi.usercenter.common.ResultUtils;
@@ -10,24 +11,26 @@ import com.yupi.usercenter.model.domain.User;
 import com.yupi.usercenter.model.domain.request.UserLoginRequest;
 import com.yupi.usercenter.model.domain.request.UserRegisterRequest;
 import com.yupi.usercenter.service.UserService;
+import org.apache.commons.csv.CSVFormat;
+import org.apache.commons.csv.CSVPrinter;
 import org.apache.commons.lang3.StringUtils;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import javax.annotation.Resource;
 import javax.servlet.http.HttpServletRequest;
-import java.util.ArrayList;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.OutputStreamWriter;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.stream.Collectors;
 
 import static com.yupi.usercenter.contant.UserConstant.ADMIN_ROLE;
 import static com.yupi.usercenter.contant.UserConstant.USER_LOGIN_STATE;
 
-/**
- * 用户接口
- *
- * @author <a href="https://github.com/liyupi">程序员鱼皮</a>
- * @from <a href="https://yupi.icu">编程导航知识星球</a>
- */
 @RestController
 @RequestMapping("/user")
 public class UserController {
@@ -50,11 +53,10 @@ public class UserController {
         String userAccount = userRegisterRequest.getUserAccount();
         String userPassword = userRegisterRequest.getUserPassword();
         String checkPassword = userRegisterRequest.getCheckPassword();
-        String planetCode = userRegisterRequest.getPlanetCode();
-        if (StringUtils.isAnyBlank(userAccount, userPassword, checkPassword, planetCode)) {
+        if (StringUtils.isAnyBlank(userAccount, userPassword, checkPassword)) {
             return null;
         }
-        long result = userService.userRegister(userAccount, userPassword, checkPassword, planetCode);
+        long result = userService.userRegister(userAccount, userPassword, checkPassword);
         return ResultUtils.success(result);
     }
 
@@ -114,21 +116,20 @@ public class UserController {
         return ResultUtils.success(safetyUser);
     }
 
-    // https://yupi.icu/
 
-    @GetMapping("/search")
-    public BaseResponse<List<User>> searchUsers(String username, HttpServletRequest request) {
-        if (!isAdmin(request)) {
-            throw new BusinessException(ErrorCode.PARAMS_ERROR);
-        }
-        QueryWrapper<User> queryWrapper = new QueryWrapper<>();
-        if (StringUtils.isNotBlank(username)) {
-            queryWrapper.like("username", username);
-        }
-        List<User> userList = userService.list(queryWrapper);
-        List<User> list = userList.stream().map(user -> userService.getSafetyUser(user)).collect(Collectors.toList());
-        return ResultUtils.success(list);
-    }
+//    @GetMapping("/search")
+//    public BaseResponse<List<User>> searchUsers(String username, HttpServletRequest request) {
+////        if (!isAdmin(request)) {
+////            throw new BusinessException(ErrorCode.PARAMS_ERROR);
+////        }
+//        QueryWrapper<User> queryWrapper = new QueryWrapper<>();
+//        if (StringUtils.isNotBlank(username)) {
+//            queryWrapper.like("username", username);
+//        }
+//        List<User> userList = userService.list(queryWrapper);
+//        List<User> list = userList.stream().map(user -> userService.getSafetyUser(user)).collect(Collectors.toList());
+//        return ResultUtils.success(list);
+//    }
 
     @PostMapping("/delete")
     public BaseResponse<Boolean> deleteUser(@RequestBody long id, HttpServletRequest request) {
@@ -142,8 +143,6 @@ public class UserController {
         return ResultUtils.success(b);
     }
 
-    // [鱼皮的学习圈](https://yupi.icu) 从 0 到 1 求职指导，斩获 offer！1 对 1 简历优化服务、2000+ 求职面试经验分享、200+ 真实简历和建议参考、25w 字前后端精选面试题
-
     /**
      * 是否为管理员
      *
@@ -155,6 +154,149 @@ public class UserController {
         Object userObj = request.getSession().getAttribute(USER_LOGIN_STATE);
         User user = (User) userObj;
         return user != null && user.getUserRole() == ADMIN_ROLE;
+    }
+
+    /**
+     * 分页获取用户列表
+     */
+    @GetMapping("/list")
+    public BaseResponse<List<User>> listUsers(@RequestParam(defaultValue = "1") Integer page,
+                                              @RequestParam(defaultValue = "10") Integer size,
+                                              HttpServletRequest request) {
+        if (!isAdmin(request)) {
+            throw new BusinessException(ErrorCode.NO_AUTH);
+        }
+        Page<User> userPage = new Page<>(page, size);
+        IPage<User> paginatedUsers = userService.page(userPage);
+        List<User> list = paginatedUsers.getRecords().stream()
+                .map(user -> userService.getSafetyUser(user))
+                .collect(Collectors.toList());
+        return ResultUtils.success(list);
+    }
+
+    /**
+     * 编辑用户信息
+     */
+    @PostMapping("/edit")
+    public BaseResponse<Boolean> editUser(@RequestBody User user, HttpServletRequest request) {
+        if (!isAdmin(request)) {
+            throw new BusinessException(ErrorCode.NO_AUTH);
+        }
+        if (user == null) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR);
+        }
+        User existingUser = userService.getById(user.getId());
+        if (existingUser == null) {
+            throw new BusinessException(ErrorCode.NULL_ERROR);
+        }
+        existingUser.setUserAccount(user.getUserAccount());
+        existingUser.setEmail(user.getEmail());
+        existingUser.setUserRole(user.getUserRole());
+        boolean b = userService.updateById(existingUser);
+        return ResultUtils.success(b);
+    }
+
+    /**
+     * 导出用户列表
+     */
+    @GetMapping("/export")
+    public ResponseEntity<byte[]> exportUsers(HttpServletRequest request) {
+        if (!isAdmin(request)) {
+            throw new BusinessException(ErrorCode.NO_AUTH);
+        }
+
+        List<User> userList = userService.list();
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        OutputStreamWriter writer = new OutputStreamWriter(out, StandardCharsets.UTF_8);
+
+        try (CSVPrinter csvPrinter = new CSVPrinter(writer, CSVFormat.DEFAULT.withHeader("ID", "Username", "UserAccount", "Email", "UserRole"))) {
+            for (User user : userList) {
+                csvPrinter.printRecord(user.getId(), user.getUsername(), user.getUserAccount(), user.getEmail(), user.getUserRole());
+            }
+            csvPrinter.flush();
+        } catch (IOException e) {
+            throw new BusinessException(ErrorCode.SYSTEM_ERROR, "Error while exporting users");
+        }
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.add(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=users.csv");
+        headers.add(HttpHeaders.CONTENT_TYPE, "text/csv; charset=UTF-8");
+
+        return new ResponseEntity<>(out.toByteArray(), headers, HttpStatus.OK);
+    }
+
+    /**
+     * 添加用户
+     */
+
+    @PostMapping("/add")
+    public BaseResponse<Boolean> addUser(@RequestBody User user, HttpServletRequest request) {
+        if (!isAdmin(request)) {
+            throw new BusinessException(ErrorCode.NO_AUTH);
+        }
+        if (user == null) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR);
+        }
+        QueryWrapper<User> queryWrapper = new QueryWrapper<>();
+        queryWrapper.eq("userAccount", user.getUserAccount());
+
+        long count = userService.count(queryWrapper);
+        if (count > 0) {
+            throw new BusinessException(ErrorCode.EXIST_ERROR, "UserAccount already exists");
+        }
+        User newUser = new User();
+        newUser.setUserAccount(user.getUserAccount());
+        newUser.setEmail(user.getEmail());
+        newUser.setUserPassword(user.getUserPassword());
+        newUser.setUserRole(user.getUserRole());
+        boolean b = userService.save(newUser);
+        return ResultUtils.success(b);
+    }
+
+    /**
+     * 修改用户状态
+     */
+    @PostMapping("/updateStatus")
+    public BaseResponse<Boolean> updateUserStatus(@RequestBody User user, HttpServletRequest request) {
+        if (!isAdmin(request)) {
+            throw new BusinessException(ErrorCode.NO_AUTH);
+        }
+        if (user == null) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR);
+        }
+        User existingUser = userService.getById(user.getId());
+        if (existingUser == null) {
+            throw new BusinessException(ErrorCode.NULL_ERROR);
+        }
+        existingUser.setUserStatus(user.getUserStatus());
+        boolean b = userService.updateById(existingUser);
+        return ResultUtils.success(b);
+    }
+
+
+    /**
+     * 根据用户名，邮箱分页查询
+     */
+    @GetMapping("/searchByPage")
+    public BaseResponse<List<User>> searchByPage(@RequestParam(defaultValue = "1") Integer page,
+                                                 @RequestParam(defaultValue = "10") Integer size,
+                                                 String userAccount, String email, HttpServletRequest request) {
+        if (!isAdmin(request)) {
+            throw new BusinessException(ErrorCode.NO_AUTH);
+        }
+        Page<User> userPage = new Page<>(page, size);
+        QueryWrapper<User> queryWrapper = new QueryWrapper<>();
+        if (StringUtils.isNotBlank(userAccount)) {
+            queryWrapper.like("userAccount", userAccount);
+        }
+        if (StringUtils.isNotBlank(email)) {
+            queryWrapper.like("email", email);
+        }
+        IPage<User> paginatedUsers = userService.page(userPage, queryWrapper);
+        List<User> list = paginatedUsers.getRecords().stream()
+                .map(user -> userService.getSafetyUser(user))
+                .collect(Collectors.toList());
+        return ResultUtils.success(list);
     }
 
 }
