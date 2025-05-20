@@ -11,7 +11,7 @@ public interface UserConstant {
     //  ------- 权限 --------
 
     /**
-     * 默认权限
+     * 默认权限 普通用户
      */
     int DEFAULT_ROLE = 0;
 

@@ -17,6 +17,7 @@ import org.apache.commons.lang3.StringUtils;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.util.DigestUtils;
 import org.springframework.web.bind.annotation.*;
 
 import javax.annotation.Resource;
@@ -28,6 +29,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.stream.Collectors;
 
+//import static com.sun.javafx.font.FontResource.SALT;
 import static com.yupi.usercenter.contant.UserConstant.ADMIN_ROLE;
 import static com.yupi.usercenter.contant.UserConstant.USER_LOGIN_STATE;
 
@@ -78,6 +80,9 @@ public class UserController {
             return ResultUtils.error(ErrorCode.PARAMS_ERROR);
         }
         User user = userService.userLogin(userAccount, userPassword, request);
+        if(user == null) {
+            return ResultUtils.error(ErrorCode.PARAMS_ERROR, "登录失败");
+        }
         return ResultUtils.success(user);
     }
 
@@ -117,19 +122,19 @@ public class UserController {
     }
 
 
-//    @GetMapping("/search")
-//    public BaseResponse<List<User>> searchUsers(String username, HttpServletRequest request) {
-////        if (!isAdmin(request)) {
-////            throw new BusinessException(ErrorCode.PARAMS_ERROR);
-////        }
-//        QueryWrapper<User> queryWrapper = new QueryWrapper<>();
-//        if (StringUtils.isNotBlank(username)) {
-//            queryWrapper.like("username", username);
+    @GetMapping("/search")
+    public BaseResponse<List<User>> searchUsers(String username, HttpServletRequest request) {
+//        if (!isAdmin(request)) {
+//            throw new BusinessException(ErrorCode.PARAMS_ERROR);
 //        }
-//        List<User> userList = userService.list(queryWrapper);
-//        List<User> list = userList.stream().map(user -> userService.getSafetyUser(user)).collect(Collectors.toList());
-//        return ResultUtils.success(list);
-//    }
+        QueryWrapper<User> queryWrapper = new QueryWrapper<>();
+        if (StringUtils.isNotBlank(username)) {
+            queryWrapper.like("username", username);
+        }
+        List<User> userList = userService.list(queryWrapper);
+        List<User> list = userList.stream().map(user -> userService.getSafetyUser(user)).collect(Collectors.toList());
+        return ResultUtils.success(list);
+    }
 
     @PostMapping("/delete")
     public BaseResponse<Boolean> deleteUser(@RequestBody long id, HttpServletRequest request) {
@@ -192,6 +197,8 @@ public class UserController {
         existingUser.setUserAccount(user.getUserAccount());
         existingUser.setEmail(user.getEmail());
         existingUser.setUserRole(user.getUserRole());
+        String encryptPassword = DigestUtils.md5DigestAsHex(("yupi" + user.getUserPassword()).getBytes());
+        existingUser.setUserPassword(encryptPassword);
         boolean b = userService.updateById(existingUser);
         return ResultUtils.success(b);
     }
@@ -204,7 +211,6 @@ public class UserController {
         if (!isAdmin(request)) {
             throw new BusinessException(ErrorCode.NO_AUTH);
         }
-
         List<User> userList = userService.list();
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         OutputStreamWriter writer = new OutputStreamWriter(out, StandardCharsets.UTF_8);
@@ -247,9 +253,14 @@ public class UserController {
         User newUser = new User();
         newUser.setUserAccount(user.getUserAccount());
         newUser.setEmail(user.getEmail());
-        newUser.setUserPassword(user.getUserPassword());
+        String userPassword= user.getUserPassword();
+        String encryptPassword = DigestUtils.md5DigestAsHex(("yupi" + userPassword).getBytes());
+        newUser.setUserPassword(encryptPassword);
         newUser.setUserRole(user.getUserRole());
         boolean b = userService.save(newUser);
+        if (!b) {
+            throw new BusinessException(ErrorCode.SYSTEM_ERROR, "添加用户失败");
+        }
         return ResultUtils.success(b);
     }
 
